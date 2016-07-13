@@ -18,6 +18,7 @@ from autouseragents.autouseragents import AutoUserAgents
 class Qiushibaike(object):
 
     def __init__(self):
+        # start up urls to fetch initial data for later use, 6 categories
         self.urls = {"8hr": "http://www.qiushibaike.com/8hr/page/",
                      "hot": "http://www.qiushibaike.com/hot/page/",
                      "imgrank": "http://www.qiushibaike.com/imgrank/page/",
@@ -26,10 +27,12 @@ class Qiushibaike(object):
                      # "history": "http://www.qiushibaike.com/history/page/",
                      "pic": "http://www.qiushibaike.com/pic/page/",
                      "textnew": "http://www.qiushibaike.com/textnew/page/"}
-        self.mua = MobileUA()
-        self.ua = AutoUserAgents()
+        self.mua = MobileUA()  # to generate mobile UA
+        self.ua = AutoUserAgents()  # to generate pc UA
         self.session = None
+        self.counter = 0  # retry times counter
 
+    # close requests session
     def closeSession(self):
         if self.session:
             try:
@@ -37,11 +40,13 @@ class Qiushibaike(object):
             except Exception, e:
                 raise e
 
+    # (generate and) return self.session
     def getSession(self):
-        if self.session:
-            return self.session
-        return requests.session()
+        if not self.session:
+            self.session = requests.session()
+        return self.session
 
+    # get random proxy and return
     def getProxy(self):
         proxies = freexici.randomProxy(many=1)
         proxyList = []
@@ -50,30 +55,44 @@ class Qiushibaike(object):
         proxy = proxyList[0]
         p = proxy.split("://")[0]
         proxy = {p: proxy}
-        print "Using proxy ", proxy
         return proxy
 
+    # main function to get html pages, support mobile simulation,
+    # proxy function, callback(s) to deal with retrieved html content
+    # callback is a string or a list of strings (name of callback functions)
     def crawl(self, url, mobile=True, proxy=False, callback=None):
+        print "Current URL: {}".format(url)
         session = self.getSession()
         headers = {}
+        # set UA
         if mobile:
             headers["User-Agent"] = self.mua.random()
         else:
             headers["User-Agent"] = self.ua.random_agent()
+        # set proxy if required
         if proxy:
             proxy = self.getProxy()
             print "with proxy: {}".format(proxy)
+        # get response object and assert success
+        # if not then retry, if retry==3 then return (skip)
         try:
             response = session.get(url, headers=headers)
             assert response.status_code == 200
         except Exception, e:
             print e
             time.sleep(1)
+            self.counter += 1
+            if self.counter >= 3:
+                print "\tTried 3 times all failed, skipped."
+                self.counter = 0
+                return True
             return self.crawl(url, True, True, callback)
 
         time.sleep(1)
+        self.counter = 0
         html = response.content
 
+        # if callback is passed then do callback
         if callback:
             print "Callback is executing."
             if not isinstance(callback, list):
@@ -82,13 +101,21 @@ class Qiushibaike(object):
             for i in range(cblen):
                 ret = eval("self." + callback[i])(html)
                 assert ret is True
-        session.close()
+
+        # finally close self.session object and return True
+        self.closeSession()
         return True
 
+    # extract userinfo table fields from user detail page html
     def exUserInfo(self, html):
         soup = BeautifulSoup(html, "lxml")
         datas = soup.find(
-            "div", class_="user-data").findAll("ul", "user-data-block-list")
+            "div", class_="user-data")
+        if datas:
+            datas = datas.findAll("ul", "user-data-block-list")
+        else:
+            print "Userinfo tags not found."
+            return True
 
         user = soup.find("link", rel="canonical")
         userurl = user["href"][:-1]
@@ -182,30 +209,34 @@ class Qiushibaike(object):
                             fans, interests, posts,
                             criticisms, smiles)
 
-        navs = soup.find("ul", class_="user-header-nav").findAll("a")
-        navList = []
-        for nav in navs:
-            navList.append(nav["href"].strip())
-        prefix = "http://qiushibaike.com"
-        articleurl = prefix + navList[1] if len(navList) == 4 else None
-        commentsurl = prefix + navList[2] if len(navList) == 4 else None
-        liaisonsurl = prefix + \
-            navList[3] if len(navList) == 4 else prefix + navList[1]
-        print "articleurl:", articleurl
-        if articleurl:
-            ret = self.crawl(articleurl, True, False, callback="exArticle")
-            assert ret is True
-        print "commentsurl:", commentsurl
-        if commentsurl:
-            ret = self.crawl(commentsurl, True, False, callback="exUserList")
-            assert ret is True
-        print "liaisonsurl:", liaisonsurl
-        if liaisonsurl:
-            ret = self.crawl(liaisonsurl, True, False, callback="exUserList")
-            assert ret is True
+        # todo: no idea on how to overpass control rules of qiushibaike
+        #  because of inability to fetch detailed pages with a direct url
+        #
+        # navs = soup.find("ul", class_="user-header-nav").findAll("a")
+        # navList = []
+        # for nav in navs:
+        #     navList.append(nav["href"].strip())
+        # prefix = "http://qiushibaike.com"
+        # articleurl = prefix + navList[1] if len(navList) == 4 else None
+        # commentsurl = prefix + navList[2] if len(navList) == 4 else None
+        # liaisonsurl = prefix + \
+        #     navList[3] if len(navList) == 4 else prefix + navList[1]
+        # print "articleurl:", articleurl
+        # if articleurl:
+        #     ret = self.crawl(articleurl, True, False, callback="exArticle")
+        #     assert ret is True
+        # print "commentsurl:", commentsurl
+        # if commentsurl:
+        #     ret = self.crawl(commentsurl, True, False, callback="exUserList")
+        #     assert ret is True
+        # print "liaisonsurl:", liaisonsurl
+        # if liaisonsurl:
+        #     ret = self.crawl(liaisonsurl, True, False, callback="exUserList")
+        #     assert ret is True
 
         return True
 
+    # extract userlist fields from any page html
     def exUserList(self, html):
         soup = BeautifulSoup(html, "lxml")
         tags = soup.findAll("a", href=re.compile(r"/users/\d+?/$"))
@@ -217,6 +248,7 @@ class Qiushibaike(object):
             self.insertUserList(userid=userid, userurl=userurl)
         return True
 
+    # wrapper of exFromBrowse, to extract new users and articles
     def exArticle(self, html):
         ret = self.exFromBrowse(html)
         assert ret is True
@@ -280,15 +312,18 @@ class Qiushibaike(object):
                                  haspic=haspic, picurl=picurl)
         return True
 
+    # a fast way to insert item into article table
     def insertArticleDB(self, articleid, anonymous, userid, articletext, haspic, picurl):
         articledb = ArticleDB(articleid, anonymous, userid,
                               articletext, haspic, picurl)
         articledb.store().close()
 
+    # a fast way to insert item into userlist table
     def insertUserList(self, userid, userurl):
         userlist = UserList(userid, userurl)
         userlist.store().close()
 
+    # a fast way to insert item into userinfo table
     def insertUserInfo(self, userid, username, userurl, married, constellations, job, hometown, uptime, fans, interests, posts, criticisms, smiles):
         userinfo = UserInfo(userid, username, userurl,
                             married, constellations,
@@ -296,6 +331,7 @@ class Qiushibaike(object):
                             interests, posts, criticisms, smiles)
         userinfo.store().close()
 
+    # crawl one category of the initial retrieval
     def doSingle(self, category, pages=3, callback=None):
         assert category in self.urls.keys()
         if pages > 35:
@@ -309,6 +345,7 @@ class Qiushibaike(object):
             print "Scraping page done."
             yield True
 
+    # crawl multi categories of the initial retrieval
     def doMulti(self, categories, pages=3, callback=None):
         assert isinstance(categories, list)
         for i in range(len(categories)):
@@ -321,14 +358,13 @@ class Qiushibaike(object):
                 assert ret is True
             yield True
 
+    # crawl all categories defined in __init__ method
     def doAll(self, pages=35, callback=None):
         rets = self.doMulti(self.urls.keys(), pages, callback)
         for ret in rets:
             assert ret is True
 
-    def exploreUser(self, url):
-        pass
-
+    # vital method to pull userinfo and more articles and more new userlist
     def expandUsers(self):
         myutil = Utils()
         connection = myutil.getConnection()
@@ -341,7 +377,6 @@ class Qiushibaike(object):
                 userid = user[0]
                 userurl = user[1]
                 callback = ["exUserInfo", "exArticle", "exUserList"]
-                callback = "exUserInfo"
                 ret = self.crawl(userurl, True, False, callback=callback)
                 assert ret is True
                 csql = "update userlist set done=%s where userid=%s"
@@ -352,5 +387,5 @@ class Qiushibaike(object):
 
 if __name__ == '__main__':
     qb = Qiushibaike()
-    qb.doAll(pages=35, callback="exFromBrowse")
-    qb.expandUsers()
+    qb.doAll(pages=35, callback="exFromBrowse")  # fetch initial data
+    qb.expandUsers()  # explore more

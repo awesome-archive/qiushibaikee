@@ -10,6 +10,9 @@ from self import self
 
 class DBModel(object):
 
+    """A parent database model class for later use."""
+
+    # initialize class level objects
     def __init__(self):
         self.util = Utils()
         self.connection = self.util.getConnection()
@@ -17,7 +20,11 @@ class DBModel(object):
         self.initSQL = []
         assert self.initdb() is True
 
+    # check to ensure the target tables exists before store any data
+    # there are all 3 tables: userinfo, userlist, article
     def initdb(self):
+
+        # create userinfo table
         initSQL1 = "create table if not exists userinfo (" +\
             "userid integer primary key,username varchar," +\
             "userurl varchar,married boolean," +\
@@ -27,16 +34,21 @@ class DBModel(object):
             "posts integer,criticisms integer," +\
             "smiles integer)"
         self.initSQL.append(initSQL1)
+
+        # create userlist table
         initSQL2 = "create table if not exists userlist (" +\
             "userid integer primary key," +\
             "userurl varchar," +\
             "done boolean)"
         self.initSQL.append(initSQL2)
+
+        # create article table
         initSQL3 = "create table if not exists article (" +\
             "articleid integer primary key,anonymous boolean," +\
             "userid integer,articletext varchar," +\
             "haspic boolean,picurl varchar)"
         self.initSQL.append(initSQL3)
+        # use try to make sure operation was successful
         try:
             for sql in self.initSQL:
                 self.cursor.execute(sql)
@@ -46,6 +58,7 @@ class DBModel(object):
             print e
             return False
 
+    # a fast way to drop all related tables in database
     def formatdb(self):
         self.reinitSQL = []
         for tname in ["userinfo", "userlist", "article"]:
@@ -60,11 +73,13 @@ class DBModel(object):
             print e
             return False
 
+    # a fast way to reinit database tables
     def reinitdb(self):
         assert self.formatdb() is True
         assert self.initdb() is True
         return True
 
+    # a fast way to close database connection and cursor objects if there is
     def close(self):
         try:
             if self.cursor is not None:
@@ -76,11 +91,15 @@ class DBModel(object):
 
 
 class UserInfo(DBModel):
+    """A userinfo object."""
 
+    # all related fields of userinfo table as below:
     # userid, username, userurl, married, constellations, job, hometown,
     # uptime, fans, interests, posts, criticisms, smiles
     def __init__(self, userid, username, userurl, married, constellations, job, hometown, uptime, fans, interests, posts, criticisms, smiles):
         DBModel.__init__(self)
+
+        # init class level atributes
         self.fields = ["userid", "username", "userurl",
                        "married", "constellations", "job",
                        "hometown", "uptime", "fans",
@@ -102,18 +121,19 @@ class UserInfo(DBModel):
 
     @self
     def store(self):
+        # first of all check if the record exists in database
         try:
             esql = "select * from userinfo where userid=%s" % self.userid
             self.cursor.execute(esql)
             rs = self.cursor.fetchall()
             sql = ""
-            if self.cursor.rowcount == 0:
+            if self.cursor.rowcount == 0:  # if not exists then insert
                 sql = "insert into userinfo (userid,username,userurl," +\
                     "married,constellations,job,hometown,uptime,fans," +\
                     "interests,posts,criticisms,smiles) " +\
                     "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"
                 print "Storing userinfo of: {}".format(self.userid)
-            else:
+            else:  # if exists then try to update userinfo data
                 sql = "update userinfo set userid=%s, username=%s, " +\
                     "userurl=%s, married=%s, constellations=%s, job=%s, " +\
                     "hometown=%s, uptime=%s, fans=%s, interests=%s, " +\
@@ -143,10 +163,14 @@ class UserInfo(DBModel):
 
 
 class ArticleDB(DBModel):
+    """An article object."""
 
+    # all related fields of article table as below:
     # articleid, anonymous, userid, articletext, haspic, picurl
     def __init__(self, articleid, anonymous, userid, articletext, haspic, picurl):
         DBModel.__init__(self)
+
+        # init class level atributes
         self.fields = ["articleid", "anonymous",
                        "userid", "articletext",
                        "haspic", "picurl"]
@@ -159,12 +183,13 @@ class ArticleDB(DBModel):
 
     @self
     def store(self):
+        # first of all check if article exists in database
         try:
             esql = "select * from article where articleid=%s and userid=%s" % (
                 self.articleid, self.userid)
             self.cursor.execute(esql)
             rs = self.cursor.fetchall()
-            if self.cursor.rowcount == 0:
+            if self.cursor.rowcount == 0:  # if not then insert into table
                 sql = "insert into article (articleid,anonymous,userid," +\
                     "articletext,haspic,picurl) values (%s,%s,%s,%s,%s,%s)"
                 self.cursor.execute(sql, (self.articleid, self.anonymous,
@@ -172,7 +197,7 @@ class ArticleDB(DBModel):
                                           self.haspic, self.picurl))
                 self.connection.commit()
                 print "Stored article: {} into articledb".format(self.articleid)
-            else:
+            else:  # or else just pass
                 print "Article {} already exists in articledb.".format(self.articleid)
         except Exception, e:
             self.connection.rollback()
@@ -188,10 +213,14 @@ class ArticleDB(DBModel):
 
 
 class UserList(DBModel):
+    """A userlist object."""
 
+    # all related fields of userlist table as follows:
     # userid,userurl,done
     def __init__(self, userid, userurl, done=False):
         DBModel.__init__(self)
+
+        # init class level attibutes
         self.fields = ["userid", "userurl", "done"]
         self.userid = userid
         self.userurl = userurl
@@ -199,18 +228,19 @@ class UserList(DBModel):
 
     @self
     def store(self):
+        # first of all check if record exists in database
         try:
             esql = "select * from userlist where userid=%s" % self.userid
             self.cursor.execute(esql)
             rs = self.cursor.fetchall()
-            if self.cursor.rowcount == 0:
+            if self.cursor.rowcount == 0:  # if not then insert into table
                 sql = "insert into userlist (userid,userurl,done)" + \
                     " values (%s,%s,%s)"
                 self.cursor.execute(
                     sql, (self.userid, self.userurl, self.done))
                 self.connection.commit()
                 print "Stored user: {} into userlist".format(self.userid)
-            else:
+            else:  # if yes just pass
                 print "User {} already exists in userlist.".format(self.userid)
         except Exception, e:
             self.connection.rollback()

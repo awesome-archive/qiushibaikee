@@ -9,23 +9,32 @@ import psycopg2
 
 
 class Utils(object):
+    """A utils class which will be used later."""
 
     def __init__(self):
+        # demonstrate a class level connection and cursor field
         self.connection = None
         self.cursor = None
 
+    # return database connection object
+    # return self.connection if utils class has a connection
+    # else return a new connection
     def getConnection(self):
         if self.connection is None:
             self.connection = psycopg2.connect(
                 "dbname=test user=test password=123456 host=127.0.0.1")
         return self.connection
 
+    # return database cursor object
+    # return self.cursor if utils class has a cursor
+    # else return a new cursor with self.connection
     def getCursor(self):
         if self.connection is None:
             self.connection = self.getConnection()
         self.cursor = self.connection.cursor()
         return self.cursor
 
+    # close database cursor and connection object if there is one
     def close(self):
         try:
             if self.cursor is not None:
@@ -38,6 +47,9 @@ class Utils(object):
 
 class MobileUA(object):
 
+    """A MobileUA class to randomly generate mobile-ua strings."""
+
+    # initialize several mobile user-agents
     def __init__(self):
         self.UA = ["Mozilla/5.0 (iPhone; U; CPU iPhone OS 4_3_3 like Mac OS X; en-us) AppleWebKit/533.17.9 (KHTML, like Gecko) Version/5.0.2 Mobile/8J2 Safari/6533.18.5",
                    "Mozilla/5.0 (iPod; U; CPU iPhone OS 4_3_3 like Mac OS X; en-us) AppleWebKit/533.17.9 (KHTML, like Gecko) Version/5.0.2 Mobile/8J2 Safari/6533.18.5",
@@ -52,6 +64,8 @@ class MobileUA(object):
                    "Mozilla/5.0 (compatible; MSIE 9.0; Windows Phone OS 7.5; Trident/5.0; IEMobile/9.0; HTC; Titan)"
                    ]
 
+    # intended to randomly generate UA strings but qiushibaike server
+    # seems to render html pages in different structures, so we use a fixed one
     def random(self):
         # return random.choice(self.UA)
         return self.UA[-1]
